@@ -1,6 +1,6 @@
 # Text-to-Image Generation with Visual Autoregressive Model (VAR)
 
-This repository is an implementation of a text-to-image model inspired by the Visual Autoregressive (VAR) paradigm described in [Visual Autoregressive Modeling Paper](https://arxiv.org/abs/2404.02905) [oai_citation:3,2404.02905v2.pdf]. This model leverages a combination of BLIP-2 for image captioning, a frozen VAE for image representation, and an adapter trained to conditionally adjust class embeddings with textual descriptions.
+This repository is an implementation of a text-to-image model inspired by the Visual Autoregressive (VAR) paradigm described in [Visual Autoregressive Modeling Paper](https://arxiv.org/abs/2404.02905). This model leverages a combination of BLIP-2 for image captioning, a frozen VAE for image representation, and an adapter trained to conditionally adjust class embeddings with textual descriptions.
 
 ## Overview
 
