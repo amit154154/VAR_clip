@@ -29,4 +29,4 @@ This repository is an implementation of a text-to-image model inspired by the Vi
 The architecture and model are inspired by the Visual Autoregressive (VAR) model from the paper [Visual Autoregressive Modeling](https://arxiv.org/abs/2404.02905). I recently came across [VAR-CLIP: Text-to-Image Generator with Visual Auto-Regressive Modeling](https://arxiv.org/abs/2408.01181), which integrates VAR with CLIP for text-to-image generation. For more detailed insights on VAR-CLIP’s contributions, please refer to the paper.
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the “Do Whatever You Want” License. You are free to use, modify, distribute, remix, and even teach this code to a koala if you’d like. No restrictions, no strings attached—just pure coding freedom for all! 🐨
