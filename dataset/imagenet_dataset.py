@@ -94,7 +94,7 @@ def dataset_collate_fn(batch):
 
 def get_train_val_datasets(
         model_name = "openai/clip-vit-base-patch32",
-        final_reso = "256",
+        final_reso = 256,
         do_hflip = False,
         batch_size = 32):
 

@@ -128,7 +128,7 @@ class VAR(nn.Module):
     @torch.no_grad()
     def autoregressive_infer_cfg(
         self, B: int, label_B: Optional[Union[int, torch.LongTensor]],cond_delta: torch.Tensor =None,
-        g_seed: Optional[int] = None, cfg=1.5, top_k=0, top_p=0.0,beta=1,alpha = 1,
+        g_seed: Optional[int] = None, cfg=1.5, top_k=0, top_p=0.0,beta=1,alpha = 0,
         more_smooth=False,
 
     ) -> torch.Tensor:   # returns reconstructed image (B, 3, H, W) in [0, 1]
@@ -157,8 +157,8 @@ class VAR(nn.Module):
             sos = cond_BD = self.class_emb(torch.cat((label_B, torch.full_like(label_B, fill_value=self.num_classes))))
             sos[0] = cond_BD[0] = cond_BD[0]*alpha
         if cond_delta is not None and beta != 0:
-            cond_BD[0] += cond_delta * beta
-            sos[0] += cond_delta * beta
+            cond_BD[0] += cond_delta[0] * beta
+            sos[0] += sos[0] * beta
 
         lvl_pos = self.lvl_embed(self.lvl_1L) + self.pos_1LC
         next_token_map = sos.unsqueeze(1).expand(2 * B, self.first_l, -1) + self.pos_start.expand(2 * B, self.first_l, -1) + lvl_pos[:, :self.first_l]
@@ -197,7 +197,7 @@ class VAR(nn.Module):
         for b in self.blocks: b.attn.kv_caching(False)
         return self.vae_proxy[0].fhat_to_img(f_hat).add_(1).mul_(0.5)   # de-normalize, from [-1, 1] to [0, 1]
     
-    def forward(self, label_B: torch.LongTensor, x_BLCv_wo_first_l: torch.Tensor,cond_delta: torch.Tensor,beta=0.05,alpha = 1) -> torch.Tensor:  # returns logits_BLV
+    def forward(self, label_B: torch.LongTensor, x_BLCv_wo_first_l: torch.Tensor,cond_delta: torch.Tensor = None,beta=0.05,alpha = 1) -> torch.Tensor:  # returns logits_BLV
         """
         :param label_B: label_B
         :param x_BLCv_wo_first_l: teacher forcing input (B, self.L-self.first_l, self.Cvae)
@@ -207,7 +207,10 @@ class VAR(nn.Module):
         B = x_BLCv_wo_first_l.shape[0]
         with torch.cuda.amp.autocast(enabled=False):
             label_B = torch.where(torch.rand(B, device=label_B.device) < self.cond_drop_rate, self.num_classes, label_B)
-            sos = cond_BD = alpha * self.class_emb(label_B) + beta * cond_delta
+            if cond_delta is not None:
+                sos = cond_BD = alpha * self.class_emb(label_B) + beta * cond_delta
+            else:
+                sos = cond_BD = self.class_emb(label_B)
             sos = sos.unsqueeze(1).expand(B, self.first_l, -1) + self.pos_start.expand(B, self.first_l, -1)
             
             if self.prog_si == 0: x_BLC = sos
