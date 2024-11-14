@@ -128,7 +128,7 @@ class VAR(nn.Module):
     @torch.no_grad()
     def autoregressive_infer_cfg(
         self, B: int, label_B: Optional[Union[int, torch.LongTensor]],cond_delta: torch.Tensor =None,
-        g_seed: Optional[int] = None, cfg=1.5, top_k=0, top_p=0.0,beta=1,alpha = 0,
+        g_seed: Optional[int] = None, cfg=1.5, top_k=0, top_p=0.0,beta=0,alpha = 1,
         more_smooth=False,
 
     ) -> torch.Tensor:   # returns reconstructed image (B, 3, H, W) in [0, 1]

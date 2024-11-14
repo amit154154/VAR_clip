@@ -70,7 +70,6 @@ class VAR_newclass(pl.LightningModule):
         return logits_BLV
 
     def training_step(self, batch, batch_idx):
-
         images = batch
         B, V = images.shape[0], self.vae.vocab_size
         class_id  = torch.full((B,), fill_value=self.start_class_id).to(self.device)
@@ -85,8 +84,8 @@ class VAR_newclass(pl.LightningModule):
         loss = self.train_loss(logits_BLV.view(-1, V), gt_BL.view(-1))
 
         # Generate and log images at specified intervals
-        if self.global_step % self.log_k == 0 and self.do_wandb:
-            self.log_generated_images( )
+        if (self.global_step % self.log_k == 0 or self.global_step == 1) and self.do_wandb:
+            self.log_generated_images()
 
         # Log the training loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -96,7 +95,7 @@ class VAR_newclass(pl.LightningModule):
     def log_generated_images(self):
 
         seed = 0
-        # Adjust cond_delta based on beta
+
         generated_images = self.var.autoregressive_infer_cfg(
             B=1,
             label_B=self.start_class_id,
