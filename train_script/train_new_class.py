@@ -3,7 +3,6 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 import wandb
-from dataset.dataset_folder import  get_train_val_datasets
 from trainers.var_new_class import VAR_newclass
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -11,25 +10,26 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 # ------------------- Hyperparameters -------------------
 
 # General settings
-dataset_folder = "/Users/mac/Documents/datasets/funko-pop/real_hd_pops/real_hd_pops"
-do_wandb = False                # Whether to use Weights & Biases for logging
+dataset_folder = "/Users/mac/Documents/datasets/funko-pop/pops_deci/pops_deci"
+dataset_name = "AmitIsraeli/pops_20k"
+do_wandb = True                # Whether to use Weights & Biases for logging
 project_name = 'VAR_newclass'  # WandB project name
 seed = 42069                     # Random seed for reproducibility
-CKPT_PATH = None
-CHECKPOINT_DIR = "checkpoints"
-CHECKPOINT_EVERY_N_TRAIN_STEPS = 1000
+CKPT_PATH = "/Users/mac/PycharmProjects/VAR_clip/train_script/checkpoints_pop_class_pops_10k/model-step-step=20000.ckpt"
+CHECKPOINT_DIR = "checkpoints_pop_class_pops_last_run"
+CHECKPOINT_EVERY_N_TRAIN_STEPS = 2000
 SAVE_LAST_CHECKPOINT = True
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'mps')
-log_k = 25                      # Interval for logging images
-start_class_id = 0
+log_k = 50                      # Interval for logging images
+start_class_id = 578
 
 # Training parameters
-batch_size = 8                # Batch size for both training and validation
+batch_size = 4                # Batch size for both training and validation
 learning_rate = 3e-4           # Learning rate for the optimizer
-num_steps = 10000              # Number of steps to train
+num_steps = 40000              # Number of steps to train
 GRADIENT_CLIP_VAL = 1
 PRECISION = '16-mixed'  # 16-bit precision
-ACCUMULATE_GRAD_BATCHES = 1
+ACCUMULATE_GRAD_BATCHES = 2
 
 # Model paths (update these paths to point to your actual checkpoint files)
 var_ckpt_path = '/Users/mac/Downloads/var_d16.pth'  # Path to VAR checkpoint
@@ -47,7 +47,6 @@ WANDB_CONFIG = {
     "batch_size": batch_size,
     "learning_rate": learning_rate,
     "seed":seed
-
 }
 
 # Set random seed for reproducibility
@@ -59,8 +58,14 @@ if do_wandb:
 else:
     wandb_logger = None
 
+
 # Get the data loaders
-train_dataloader, val_dataloader = get_train_val_datasets(dataset_folder,batch_size=batch_size)
+if dataset_name is not None:
+    from dataset.HuggingFaceImageDataset import get_train_val_datasets
+    train_dataloader, val_dataloader = get_train_val_datasets(dataset_name,batch_size=batch_size)
+else:
+    from dataset.dataset_folder import get_train_val_datasets
+    train_dataloader, val_dataloader = get_train_val_datasets(dataset_folder,batch_size=batch_size)
 
 
 
@@ -102,4 +107,4 @@ trainer = pl.Trainer(
 # Start training
 # -----------------------
 
-trainer.fit(model, train_dataloader, ckpt_path=CKPT_PATH)
+trainer.fit(model, train_dataloader,val_dataloader, ckpt_path=CKPT_PATH)

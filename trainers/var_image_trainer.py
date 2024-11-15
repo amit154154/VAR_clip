@@ -24,7 +24,7 @@ class SimpleAdapter(nn.Module):
         super(SimpleAdapter, self).__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.norm0 = nn.LayerNorm(input_dim)
-        self.activation1 = nn.GELU()
+        self.activation1 = nn.Tanh()
         self.layer2 = nn.Linear(hidden_dim, out_dim)
         self.norm2 = nn.LayerNorm(out_dim)
         self._initialize_weights()
@@ -32,7 +32,7 @@ class SimpleAdapter(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                nn.init.xavier_uniform_(m.weight, gain=0.01)
                 nn.init.zeros_(m.bias)
             elif isinstance(m, nn.LayerNorm):
                 nn.init.ones_(m.weight)
@@ -54,13 +54,16 @@ class VAR_Image(pl.LightningModule):
                  siglip_model='facebook/siglip-vision-base',  # Specify the SigLIP model path or name
                  log_k=100,
                  do_wandb=False,
-                 beta=0.01,
+                 beta=1,
                  alpha=1,
                  hugging_face_token=None,
-                learning_rate = 1e-3
+                 learning_rate = 1e-3,
+                 fine_tune_pop = False,
+                 start_class_id = 578
                  ):
         super().__init__()
         self.device_name = device
+        self.fine_tune_pop = fine_tune_pop
 
         # Initialize VAE and VAR models
         patch_nums = (1, 2, 3, 4, 5, 6, 8, 10, 13, 16)
@@ -69,7 +72,14 @@ class VAR_Image(pl.LightningModule):
             device=device, patch_nums=patch_nums,
             num_classes=1000, depth=MODEL_DEPTH, shared_aln=False,
         )
-        self.var.load_state_dict(torch.load(var_ckpt, map_location=device), strict=True)
+        if not fine_tune_pop:
+            self.var.load_state_dict(torch.load(var_ckpt, map_location=device), strict=True)
+        else:
+            state_dict = torch.load(var_ckpt, map_location=device)['state_dict']
+            var_state_dict = {k[len('var.'):]: v for k, v in state_dict.items() if k.startswith('var.')}
+            self.var.load_state_dict(var_state_dict, strict=True)
+            self.start_class_id = start_class_id
+
         self.vae.load_state_dict(torch.load(vae_ckpt, map_location=device), strict=True)
         self.vae.eval()
         self.hugging_face_token = hugging_face_token
@@ -94,8 +104,9 @@ class VAR_Image(pl.LightningModule):
         self.train_loss = nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')
         self.log_k = log_k
         self.do_wandb = do_wandb
-        self.beta = beta
+        self.beta_target = beta  # Set the target beta value
         self.alpha = alpha
+
 
     def apply_lora_to_var(self):
         """
@@ -121,7 +132,7 @@ class VAR_Image(pl.LightningModule):
         self.var = get_peft_model(self.var, lora_config)
         self.var.train()
 
-    def forward(self, label_B, x_BLCv_wo_first_l, images_siglip):
+    def forward(self, label_B, x_BLCv_wo_first_l, images_siglip, beta):
         """
         Forward pass of the model.
 
@@ -129,7 +140,7 @@ class VAR_Image(pl.LightningModule):
             label_B (Tensor): Class labels.
             x_BLCv_wo_first_l (Tensor): VAE quantized inputs.
             images_siglip (Tensor): Condition images processed by SigLIP's processor.
-
+            beta (float): The current beta value.
         Returns:
             Tuple[Tensor, Tensor]: Output logits and conditioning delta.
         """
@@ -149,7 +160,7 @@ class VAR_Image(pl.LightningModule):
         cond_delta = self.adapter(cond_delta)
 
         # Forward through the VAR model
-        logits_BLV = self.var(label_B, x_BLCv_wo_first_l, cond_delta, beta=self.beta, alpha=self.alpha)
+        logits_BLV = self.var(label_B, x_BLCv_wo_first_l, cond_delta, beta=beta, alpha=self.alpha)
 
         return logits_BLV, cond_delta
 
@@ -176,7 +187,13 @@ class VAR_Image(pl.LightningModule):
         Returns:
             Tensor: Computed loss.
         """
-        images, images_siglip, class_id, description = batch['images'], batch['images_siglip'], batch['labels'], batch['description']
+        if not self.fine_tune_pop:
+            images, images_siglip, class_id, description = batch['images'], batch['images_siglip'], batch['labels'], batch['description']
+        else:
+            images,images_siglip = batch
+            B, V = images.shape[0], self.vae.vocab_size
+            class_id = torch.full((B,), fill_value=self.start_class_id).to(self.device)
+
         B, V = class_id.shape[0], self.vae.vocab_size
 
         # VAE quantization
@@ -184,20 +201,28 @@ class VAR_Image(pl.LightningModule):
         gt_BL = torch.cat(gt_idx_Bl, dim=1)  # Shape: (B, 680)
         x_BLCv_wo_first_l = self.vae.quantize.idxBl_to_var_input(gt_idx_Bl)
 
+        # Compute beta based on current step
+        total_steps = self.trainer.estimated_stepping_batches
+        current_step = self.global_step
+        beta = min((current_step / total_steps) * self.beta_target, self.beta_target)
+
         # Forward pass
-        logits_BLV, cond_delta = self(label_B=class_id, x_BLCv_wo_first_l=x_BLCv_wo_first_l, images_siglip=images_siglip)
+        logits_BLV, cond_delta = self(label_B=class_id, x_BLCv_wo_first_l=x_BLCv_wo_first_l, images_siglip=images_siglip, beta=beta)
         loss = self.train_loss(logits_BLV.view(-1, V), gt_BL.view(-1))
 
         # Generate and log images at specified intervals
         if self.global_step % self.log_k == 0 and self.do_wandb:
-            self.log_generated_images(class_id, cond_delta, images_siglip)
+            self.log_generated_images(class_id, cond_delta, images_siglip, beta)
 
-        # Log the training loss
+        # Log the training loss and beta
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("beta", beta, on_step=True, on_epoch=False, prog_bar=True, logger=True)
 
         return loss
 
-    def log_generated_images(self, class_id, cond_delta, images_siglip):
+
+
+    def log_generated_images(self, class_id, cond_delta, images_siglip, current_beta):
         """
         Logs generated images with different alpha and beta settings to WandB.
 
@@ -205,12 +230,13 @@ class VAR_Image(pl.LightningModule):
             class_id (Tensor): The class IDs of the images.
             cond_delta (Tensor): Conditioning delta from the SigLIP vision encoder.
             images_siglip (Tensor): Condition images processed by SigLIP's processor.
+            current_beta (float): The current beta value used in training.
         """
         # Define different settings for alpha and beta
         settings = [
-            {'alpha': self.alpha, 'beta': self.beta, 'label': f'Beta=beta-{self.beta}'},
-            {'alpha': self.alpha, 'beta': 1.5*self.beta, 'label': f'Beta=1.5*beta-{1.5*self.beta}'},
-            {'alpha': 1, 'beta': 0, 'label': 'alpha = 1 Beta=0'}
+            {'alpha': 1, 'beta': 0, 'label': 'alpha = 1 Beta=0'},
+            {'alpha': self.alpha, 'beta': current_beta, 'label': f'Beta=beta'},
+            {'alpha': self.alpha, 'beta': 1.5*current_beta, 'label': f'Beta=1.5*beta'}
         ]
 
         images_to_log = []

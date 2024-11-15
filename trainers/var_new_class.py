@@ -85,14 +85,14 @@ class VAR_newclass(pl.LightningModule):
 
         # Generate and log images at specified intervals
         if (self.global_step % self.log_k == 0 or self.global_step == 1) and self.do_wandb:
-            self.log_generated_images()
+            self.log_generated_images(images[0])
 
         # Log the training loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
         return loss
 
-    def log_generated_images(self):
+    def log_generated_images(self,gt_image):
 
         seed = 0
 
@@ -107,6 +107,9 @@ class VAR_newclass(pl.LightningModule):
         self.logger.experiment.log({
             f"generated_images": wandb.Image(
                 generated_images
+            ),
+            f"gt_image": wandb.Image(
+                gt_image
             )
         }, step=self.global_step)
 
