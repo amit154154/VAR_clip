@@ -97,7 +97,7 @@ class VAR_newclass(pl.LightningModule):
         seed = 0
 
         generated_images = self.var.autoregressive_infer_cfg(
-            B=1,
+            B=3,
             label_B=self.start_class_id,
             top_k=900,
             top_p=0.95,

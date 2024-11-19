@@ -11,13 +11,13 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 # General settings
 dataset_folder = "/Users/mac/Documents/datasets/funko-pop/pops_deci/pops_deci"
-dataset_name = "AmitIsraeli/pops_20k"
+dataset_name = "AmitIsraeli/pops_all"
 do_wandb = True                # Whether to use Weights & Biases for logging
 project_name = 'VAR_newclass'  # WandB project name
 seed = 42069                     # Random seed for reproducibility
-CKPT_PATH = "/Users/mac/PycharmProjects/VAR_clip/train_script/checkpoints_pop_class_pops_10k/model-step-step=20000.ckpt"
-CHECKPOINT_DIR = "checkpoints_pop_class_pops_last_run"
-CHECKPOINT_EVERY_N_TRAIN_STEPS = 2000
+CKPT_PATH = "/Users/mac/PycharmProjects/VAR_clip/train_script/checkpoints_pop_class_pops_last_run/model-step-step=32000.ckpt"
+CHECKPOINT_DIR = "checkpoints_pop_class_pops_last_run_all_100k"
+CHECKPOINT_EVERY_N_TRAIN_STEPS = 4000
 SAVE_LAST_CHECKPOINT = True
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'mps')
 log_k = 50                      # Interval for logging images
@@ -26,7 +26,7 @@ start_class_id = 578
 # Training parameters
 batch_size = 4                # Batch size for both training and validation
 learning_rate = 3e-4           # Learning rate for the optimizer
-num_steps = 40000              # Number of steps to train
+num_steps = 100000              # Number of steps to train
 GRADIENT_CLIP_VAL = 1
 PRECISION = '16-mixed'  # 16-bit precision
 ACCUMULATE_GRAD_BATCHES = 2

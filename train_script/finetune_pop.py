@@ -10,36 +10,36 @@ from dataset.HuggingFaceImageDataset import get_train_val_datasets
 # ------------------- Hyperparameters -------------------
 
 # General settings
-dataset_name = "AmitIsraeli/pops_20k"
+dataset_name = "AmitIsraeli/pops_all"
 do_wandb = True                     # Whether to use Weights & Biases for logging
 hugging_face_token = "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"         # Hugging Face token
 project_name = 'VAR_finepop_image'         # WandB project name (updated to reflect SigLIP usage)
 seed = 420134                        # Random seed for reproducibility
 CKPT_PATH = None                    # Path to a checkpoint to resume training (if any)
-CHECKPOINT_DIR = "checkpoints_VAR_finepop_imag"      # Directory to save checkpoints
-CHECKPOINT_EVERY_N_TRAIN_STEPS = 1000  # Save checkpoint every N training steps
+CHECKPOINT_DIR = "checkpoints_VAR_finepop_siglipImage"      # Directory to save checkpoints
+CHECKPOINT_EVERY_N_TRAIN_STEPS = 2500  # Save checkpoint every N training steps
 SAVE_LAST_CHECKPOINT = True         # Whether to save the last checkpoint
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'mps')  # Device configuration
 log_k = 50                          # Interval for logging generated images
-do_lora = True
+do_lora = False
 only_class = None
 
 # Training parameters
 batch_size = 4                      # Batch size for both training and validation
-learning_rate = 2e-5              # Learning rate for the optimizer
-num_steps = 10000                   # Number of steps to train
+learning_rate = 1e-4              # Learning rate for the optimizer
+num_steps = 20000                   # Number of steps to train
 GRADIENT_CLIP_VAL = 1               # Gradient clipping value
 PRECISION = '16-mixed'              # Precision mode (e.g., 16-bit mixed precision)
-ACCUMULATE_GRAD_BATCHES = 2         # Gradient accumulation steps
+ACCUMULATE_GRAD_BATCHES = 1         # Gradient accumulation steps
 
 # Model paths (update these paths to point to your actual checkpoint files)
-var_ckpt_path = "/Users/mac/PycharmProjects/VAR_clip/train_script/checkpoints_pop_class_2/last.ckpt"            # Path to VAR checkpoint
+var_ckpt_path = "/Users/mac/PycharmProjects/VAR_clip/train_script/checkpoints_pop_class_pops_last_run_all_100k/model-step-step=52000.ckpt"            # Path to VAR checkpoint
 vae_ckpt_path = '/Users/mac/Downloads/vae_ch160v4096z32.pth'    # Path to VAE checkpoint
 
 # Model settings
 clip_model_name = 'openai/clip-vit-base-patch32'               # CLIP model name for tokenizer
 siglip_model_name = 'google/siglip-base-patch16-224'               # SigLIP model name for image processor
-beta = 0.1                                                     # Beta parameter for the model
+beta = 1                                                     # Beta parameter for the model
 alpha = 1                                                     # Alpha parameter for the model
 MODEL_DEPTH = 16                                                 # Depth of the VAR model
 

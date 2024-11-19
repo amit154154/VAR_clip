@@ -18,11 +18,11 @@ This repository is an implementation of a text-to-image model inspired by the Vi
 - **Adapter:** The only trainable layer, adapting the text encoding to generate images conditioned on textual descriptions.
 - **Hyperparameters:** `alpha` and `beta` control the weighting of the class embedding and adapter output.
 
+### [PopYOU experimant](https://wandb.ai/amit154154/VAR_finepop_image_aws/reports/VAR-Fine-tune--VmlldzoxMDI0NDQ4OQ)
+
 ## Future Improvements
 
 - **Bounding Box Conditioning:** Incorporate bounding box conditioning similar to ControlNet, enabling the model to handle spatial constraints.
-- **Hyperparameter Tuning:** Experiment with different values for `alpha` and `beta`, as well as additional hyperparameters.
-- **LoRA Training for VAR:** Explore training the VAR using Low-Rank Adaptation (LoRA) for improved efficiency and fine-tuning capabilities.
 - **Diverse Datasets:** Train on a more diverse dataset to enhance generalization and adaptability across different styles and categories.
 
 ## Acknowledgments
