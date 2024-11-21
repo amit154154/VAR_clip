@@ -9,9 +9,10 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
 from dataset.imagenet_dataset import get_train_transforms
 from transformers import CLIPTokenizer, SiglipImageProcessor  # Added SiglipImageProcessor
+from transformers import AutoTokenizer, SiglipTextModel
 
 class HuggingFaceImageDataset(Dataset):
-    def __init__(self, dataset_name, split='train', transform=None,processor = None):
+    def __init__(self, dataset_name, split='train', transform=None,processor = None,text_processor = None):
         """
         Args:
             dataset_name (str): The name of the dataset on Hugging Face Hub (e.g., 'username/dataset_name').
@@ -22,6 +23,7 @@ class HuggingFaceImageDataset(Dataset):
         self.dataset = load_dataset(dataset_name, split=split)
         self.transform = transform
         self.processor = processor
+        self.text_processor = text_processor
         print(f"loaded huggingface dataset {dataset_name} split {split}")
 
     def __len__(self):
@@ -31,25 +33,38 @@ class HuggingFaceImageDataset(Dataset):
         # Load the image and text for the given index
         item = self.dataset[idx]
         image = item['image']  # this is a PIL Image in HF dataset by default
-        #prompt = item['text']  # this is the text prompt associated with the image
-
-        # Apply transformations if any
+       # Apply transformations if any
         if self.transform:
             image_transform = self.transform(image)
+            if self.text_processor is not None:
+                prompt = item['text']  # this is the text prompt associated with the image
+                prompt = self.text_processor(
+                    [prompt],
+                    padding="max_length",
+                    truncation=True,
+                    max_length=64,  # Set to model's expected max length
+                    return_tensors="pt"
+                )
+                return image_transform, prompt
         if self.processor is not None:
             images_siglip = self.processor(images=image, return_tensors="pt")['pixel_values'].squeeze(0)
             return image_transform,images_siglip
 
+
         return image_transform
 
-def get_train_val_datasets(dataset_name = "AmitIsraeli/pops_10k",transform_2 = False ,train_ratio=0.9, batch_size=32,final_reso = 256,siglip_model_name ="google/siglip-base-patch16-224",hugging_face_token = None ):
+def get_train_val_datasets(dataset_name = "AmitIsraeli/pops_10k",transform_2 = False,text_use = False ,train_ratio=0.9, batch_size=32,final_reso = 256,siglip_model_name ="google/siglip-base-patch16-224",hugging_face_token = None ):
     mid_reso = round(1.125 * final_reso)  # mid_reso = 252
     transform = get_train_transforms(final_reso, mid_reso, hflip = False)
     if transform_2:
         processor = SiglipImageProcessor.from_pretrained(siglip_model_name,token=hugging_face_token)
     else:
         processor = None
-    dataset = HuggingFaceImageDataset(dataset_name, transform=transform,processor=processor)
+    if text_use:
+        text_processor = AutoTokenizer.from_pretrained(siglip_model_name)
+    else:
+        text_processor = None
+    dataset = HuggingFaceImageDataset(dataset_name, transform=transform,processor=processor,text_processor=text_processor)
 
     # Calculate lengths for train and validation splits
     train_size = int(train_ratio * len(dataset))
