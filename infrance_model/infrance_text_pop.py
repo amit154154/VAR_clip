@@ -93,7 +93,8 @@ class InrenceTextVAR(nn.Module):
         return image
 
     @torch.no_grad()
-    def generate_video(self, text, start_beta, target_beta, fps, length, top_k=0, top_p=0.9, seed=None, more_smooth=False,
+    def generate_video(self, text, start_beta, target_beta, fps, length, top_k=0, top_p=0.9, seed=None,
+                       more_smooth=False,
                        output_filename='output_video.mp4'):
 
         if seed is None:
@@ -101,7 +102,17 @@ class InrenceTextVAR(nn.Module):
 
         num_frames = int(fps * length)
         images = []
-        beta_values = np.linspace(start_beta, target_beta, num_frames)
+
+        # Define an easing function for smoother interpolation
+        def ease_in_out(t):
+            return t * t * (3 - 2 * t)
+
+        # Generate t values between 0 and 1
+        t_values = np.linspace(0, 1, num_frames)
+        # Apply the easing function
+        eased_t_values = ease_in_out(t_values)
+        # Interpolate beta values using the eased t values
+        beta_values = start_beta + (target_beta - start_beta) * eased_t_values
 
         for beta in beta_values:
             image = self.generate_image(text, beta=beta, seed=seed, more_smooth=more_smooth, top_k=top_k, top_p=top_p)
@@ -111,90 +122,95 @@ class InrenceTextVAR(nn.Module):
         clip = ImageSequenceClip(images, fps=fps)
         clip.write_videofile(output_filename, codec='libx264')
 
+if __name__ == '__main__':
+    import torch
+    from torch.quantization import quantize_dynamic
+    import torch.nn as nn
 
-# Initialize the model
-pl_checkpoint = '/Users/mac/Downloads/model-step-step=35000.ckpt'  # Replace with your actual checkpoint path
-device = 'mps'  # Change to 'cuda' or 'mps' if you have compatible hardware
-model = InrenceTextVAR(pl_checkpoint=pl_checkpoint, device=device)
-model.to(device)
+    # Initialize the model
+    pl_checkpoint = '/Users/mac/Downloads/model-step-step=35000.ckpt'  # Replace with your actual checkpoint path
+    device = 'mps'
+    model = InrenceTextVAR(pl_checkpoint=pl_checkpoint, device=device)
+    model.to(device)
 
-def generate_image_gradio(text, beta=1.0, seed=None, more_smooth=False, top_k=0, top_p=0.9):
-    print(f"Generating image for text: {text}\n"
-          f"beta: {beta}\n"
-          f"seed: {seed}\n"
-          f"more_smooth: {more_smooth}\n"
-          f"top_k: {top_k}\n"
-          f"top_p: {top_p}\n")
-    image = model.generate_image(text, beta=beta, seed=seed, more_smooth=more_smooth, top_k=int(top_k), top_p=top_p)
-    return image
 
-def generate_video_gradio(text, start_beta=1.0, target_beta=1.0, fps=10, length=5.0, top_k=0, top_p=0.9, seed=None, more_smooth=False, progress=gr.Progress()):
-    print(f"Generating video for text: {text}\n"
-          f"start_beta: {start_beta}\n"
-          f"target_beta: {target_beta}\n"
-          f"seed: {seed}\n"
-          f"more_smooth: {more_smooth}\n"
-          f"top_k: {top_k}\n"
-          f"top_p: {top_p}"
-          f"fps: {fps}\n"
-          f"length: {length}\n")
-    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmpfile:
-        output_filename = tmpfile.name
-    num_frames = int(fps * length)
-    beta_values = np.linspace(start_beta, target_beta, num_frames)
-    images = []
+    def generate_image_gradio(text, beta=1.0, seed=None, more_smooth=False, top_k=0, top_p=0.9):
+        print(f"Generating image for text: {text}\n"
+              f"beta: {beta}\n"
+              f"seed: {seed}\n"
+              f"more_smooth: {more_smooth}\n"
+              f"top_k: {top_k}\n"
+              f"top_p: {top_p}\n")
+        image = model.generate_image(text, beta=beta, seed=seed, more_smooth=more_smooth, top_k=int(top_k), top_p=top_p)
+        return image
 
-    for i, beta in enumerate(beta_values):
-        image = model.generate_image(text, beta=beta, seed=seed, more_smooth=more_smooth, top_k=top_k, top_p=top_p)
-        images.append(np.array(image))
-        # Update progress
-        progress((i + 1) / num_frames)
-        # Yield the frame image to update the GUI
-        yield image, gr.update()
+    def generate_video_gradio(text, start_beta=1.0, target_beta=1.0, fps=10, length=5.0, top_k=0, top_p=0.9, seed=None, more_smooth=False, progress=gr.Progress()):
+        print(f"Generating video for text: {text}\n"
+              f"start_beta: {start_beta}\n"
+              f"target_beta: {target_beta}\n"
+              f"seed: {seed}\n"
+              f"more_smooth: {more_smooth}\n"
+              f"top_k: {top_k}\n"
+              f"top_p: {top_p}"
+              f"fps: {fps}\n"
+              f"length: {length}\n")
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmpfile:
+            output_filename = tmpfile.name
+        num_frames = int(fps * length)
+        beta_values = np.linspace(start_beta, target_beta, num_frames)
+        images = []
 
-    # After generating all frames, create the video
-    clip = ImageSequenceClip(images, fps=fps)
-    clip.write_videofile(output_filename, codec='libx264')
+        for i, beta in enumerate(beta_values):
+            image = model.generate_image(text, beta=beta, seed=seed, more_smooth=more_smooth, top_k=top_k, top_p=top_p)
+            images.append(np.array(image))
+            # Update progress
+            progress((i + 1) / num_frames)
+            # Yield the frame image to update the GUI
+            yield image, gr.update()
 
-    # Yield the final video output
-    yield gr.update(), output_filename
+        # After generating all frames, create the video
+        clip = ImageSequenceClip(images, fps=fps)
+        clip.write_videofile(output_filename, codec='libx264')
 
-with gr.Blocks() as demo:
-    gr.Markdown("# Text to Image/Video Generator")
-    with gr.Tab("Generate Image"):
-        text_input = gr.Textbox(label="Input Text")
-        beta_input = gr.Slider(label="Beta", minimum=0.0, maximum=2.5, step=0.05, value=1.0)
-        seed_input = gr.Number(label="Seed", value=None)
-        more_smooth_input = gr.Checkbox(label="More Smooth", value=False)
-        top_k_input = gr.Number(label="Top K", value=0)
-        top_p_input = gr.Slider(label="Top P", minimum=0.0, maximum=1.0, step=0.01, value=0.9)
-        generate_button = gr.Button("Generate Image")
-        image_output = gr.Image(label="Generated Image")
-        generate_button.click(
-            generate_image_gradio,
-            inputs=[text_input, beta_input, seed_input, more_smooth_input, top_k_input, top_p_input],
-            outputs=image_output
-        )
+        # Yield the final video output
+        yield gr.update(), output_filename
 
-    with gr.Tab("Generate Video"):
-        text_input_video = gr.Textbox(label="Input Text")
-        start_beta_input = gr.Slider(label="Start Beta", minimum=0.0, maximum=2.5, step=0.05, value=0)
-        target_beta_input = gr.Slider(label="Target Beta",minimum=0.0, maximum=2.5, step=0.05, value=1.0)
-        fps_input = gr.Number(label="FPS", value=10)
-        length_input = gr.Number(label="Length (seconds)", value=5.0)
-        seed_input_video = gr.Number(label="Seed", value=None)
-        more_smooth_input_video = gr.Checkbox(label="More Smooth", value=False)
-        top_k_input_video = gr.Number(label="Top K", value=0)
-        top_p_input_video = gr.Slider(label="Top P", minimum=0.0, maximum=1.0, step=0.01, value=0.9)
-        generate_video_button = gr.Button("Generate Video")
-        frame_output = gr.Image(label="Current Frame")
-        video_output = gr.Video(label="Generated Video")
+    with gr.Blocks() as demo:
+        gr.Markdown("# Text to Image/Video Generator")
+        with gr.Tab("Generate Image"):
+            text_input = gr.Textbox(label="Input Text")
+            beta_input = gr.Slider(label="Beta", minimum=0.0, maximum=2.5, step=0.05, value=1.0)
+            seed_input = gr.Number(label="Seed", value=None)
+            more_smooth_input = gr.Checkbox(label="More Smooth", value=False)
+            top_k_input = gr.Number(label="Top K", value=0)
+            top_p_input = gr.Slider(label="Top P", minimum=0.0, maximum=1.0, step=0.01, value=0.9)
+            generate_button = gr.Button("Generate Image")
+            image_output = gr.Image(label="Generated Image")
+            generate_button.click(
+                generate_image_gradio,
+                inputs=[text_input, beta_input, seed_input, more_smooth_input, top_k_input, top_p_input],
+                outputs=image_output
+            )
 
-        generate_video_button.click(
-            generate_video_gradio,
-            inputs=[text_input_video, start_beta_input, target_beta_input, fps_input, length_input, top_k_input_video, top_p_input_video, seed_input_video, more_smooth_input_video],
-            outputs=[frame_output, video_output],
-            queue=True  # Enable queuing to allow for progress updates
-        )
+        with gr.Tab("Generate Video"):
+            text_input_video = gr.Textbox(label="Input Text")
+            start_beta_input = gr.Slider(label="Start Beta", minimum=0.0, maximum=2.5, step=0.05, value=0)
+            target_beta_input = gr.Slider(label="Target Beta",minimum=0.0, maximum=2.5, step=0.05, value=1.0)
+            fps_input = gr.Number(label="FPS", value=10)
+            length_input = gr.Number(label="Length (seconds)", value=5.0)
+            seed_input_video = gr.Number(label="Seed", value=None)
+            more_smooth_input_video = gr.Checkbox(label="More Smooth", value=False)
+            top_k_input_video = gr.Number(label="Top K", value=0)
+            top_p_input_video = gr.Slider(label="Top P", minimum=0.0, maximum=1.0, step=0.01, value=0.9)
+            generate_video_button = gr.Button("Generate Video")
+            frame_output = gr.Image(label="Current Frame")
+            video_output = gr.Video(label="Generated Video")
 
-demo.launch()
+            generate_video_button.click(
+                generate_video_gradio,
+                inputs=[text_input_video, start_beta_input, target_beta_input, fps_input, length_input, top_k_input_video, top_p_input_video, seed_input_video, more_smooth_input_video],
+                outputs=[frame_output, video_output],
+                queue=True  # Enable queuing to allow for progress updates
+            )
+
+    demo.launch()
